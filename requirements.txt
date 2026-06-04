@@ -1,0 +1,5 @@
+discord.py 
+discord.py[voice]
+dotenv
+asyncio
+logging

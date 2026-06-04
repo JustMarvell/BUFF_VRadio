@@ -30,7 +30,7 @@ class Search(commands.Cog):
             )
             embed.set_author(name=f"Result {i}")
             if r['thumbnail']:
-                embed.set_thumbnail(url=r['thumbnail'])
+                embed.set_image(url=r['thumbnail'])
             embed.add_field(name="Channel", value=r['channel'] or 'Unknown')
             if r['duration']:
                 mins, secs = divmod(r['duration'], 60)

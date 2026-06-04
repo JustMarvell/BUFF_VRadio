@@ -12,3 +12,12 @@
 >> - /skip : Skip the current song
 >> - /release : Stop the song and leave the voice channel
 >> - /autoplay : Toggle the autoplay
+
+> ## How to clone this project?
+>> ```bash
+>> git clone https://github.com/JustMarvell/BUFF_VRadio.git path/to/project
+>> cd path/to/project
+>> touch logs/infos.log
+>> python3 -m venv venv
+>> venv/bin/pip install -r requirements.txt
+>> ```

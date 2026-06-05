@@ -1,4 +1,4 @@
-from config import FFMPEG_OPTIONS, YDL_OPTS
+from config import FFMPEG_OPTIONS, YDL_OPTS_PLAY
 import asyncio
 import discord
 import yt_dlp
@@ -21,10 +21,9 @@ def get_state(guild_id: int) -> GuildMusicState:
 
 async def fetch_track(query: str) -> dict | None:
     loop = asyncio.get_event_loop()
-    opts = {**YDL_OPTS, 'format' : 'bestaudio/best'}
 
     def _fetch():
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with yt_dlp.YoutubeDL(YDL_OPTS_PLAY) as ydl:
             info = ydl.extract_info(query, download=False)
             entries = info.get('entries')
             return entries[0] if entries else info

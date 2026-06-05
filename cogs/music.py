@@ -5,69 +5,125 @@ from controllers import music
 async def setup(bot: commands.Bot):
     await bot.add_cog(Music(bot))
 
+class MusicControls(discord.ui.View):
+    def __init__(self, guild_id: int):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+
+    def _vc(self, interaction: discord.Interaction):
+        return interaction.guild.voice_client
+
+    @discord.ui.button(label="⏸", style=discord.ButtonStyle.secondary)
+    async def pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = self._vc(interaction)
+        if not vc:
+            return await interaction.response.send_message("Not in a voice channel.", ephemeral=True)
+
+        if vc.is_paused():
+            music.resume(vc)
+            button.label = "⏸"
+        elif vc.is_playing():
+            music.pause(vc)
+            button.label = "▶"
+        else:
+            return await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="⏭", style=discord.ButtonStyle.primary)
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = self._vc(interaction)
+        if not vc:
+            return await interaction.response.send_message("Not in a voice channel.", ephemeral=True)
+
+        skipped = music.skip(self.guild_id, vc)
+        await interaction.response.send_message("Skipped." if skipped else "Nothing to skip.", ephemeral=True, delete_after=3)
+
+    @discord.ui.button(label="⏹", style=discord.ButtonStyle.danger)
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = self._vc(interaction)
+        if not vc:
+            return await interaction.response.send_message("Not in a voice channel.", ephemeral=True)
+
+        music.stop(self.guild_id, vc)
+        await interaction.response.edit_message(embed=stopped_embed(), view=None)
+
+
+def now_playing_embed(track: dict) -> discord.Embed:
+    embed = discord.Embed(title="▶ Now Playing", description=f"**{track['title']}**", color=discord.Color.red())
+    if track.get("thumbnail"):
+        embed.set_image(url=track["thumbnail"])
+    if track.get("duration"):
+        mins, secs = divmod(track["duration"], 60)
+        embed.add_field(name="Duration", value=f"`{mins}:{secs:02d}`")
+    if track.get("webpage_url"):
+        embed.add_field(name="Link", value=f"[YouTube]({track['webpage_url']})")
+    return embed
+
+def queued_embed(track: dict, pos: int) -> discord.Embed:
+    return discord.Embed(
+        title="Added to Queue",
+        description=f"**{track['title']}** — position #{pos}",
+        color=discord.Color.blurple()
+    )
+
+def stopped_embed() -> discord.Embed:
+    return discord.Embed(title="⏹ Stopped", description="Queue cleared.", color=discord.Color.dark_gray())
+
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        
+
     @commands.hybrid_command()
     @commands.guild_only()
     async def arise(self, ctx: commands.Context):
         """ Join the voice channel """
-        
         await ctx.defer()
-        
         if not ctx.author.voice:
-            await ctx.send("Please join a voice channel first")
-            return
-                
-        if ctx.guild.voice_client is None:
+            return await ctx.send("Please join a voice channel first.")
+
+        vc = ctx.guild.voice_client
+        if vc is None:
             await ctx.author.voice.channel.connect()
-            await ctx.send("I've been summoned")
-        elif ctx.guild.voice_client.channel is not ctx.author.voice.channel:
-            await ctx.guild.voice_client.move_to(ctx.author.voice.channel)
-            await ctx.send(f"Moved to new channel")
+            await ctx.send("I've been summoned.")
+        elif vc.channel != ctx.author.voice.channel:
+            await vc.move_to(ctx.author.voice.channel)
+            await ctx.send("Moved to your channel.")
         else:
-            await ctx.send("I'm already in your voice channel")
-        
+            await ctx.send("Already in your channel.")
+
     @commands.hybrid_command()
     @commands.guild_only()
     async def release(self, ctx: commands.Context):
         """ Leave the voice channel """
-
-        client = ctx.guild.voice_client
         await ctx.defer()
-        
-        if client:
-            await client.disconnect()
-            
-            await ctx.send("See you in the other side")
+        vc = ctx.guild.voice_client
+        if vc:
+            await vc.disconnect()
+            await ctx.send("See you on the other side.")
         else:
-            await ctx.send("I'm not in a voice channel")
-            
+            await ctx.send("Not in a voice channel.")
+
     @commands.hybrid_command()
     @commands.guild_only()
     async def play(self, ctx: commands.Context, *, song_name: str):
         """ Play a song or add it to the queue """
         await ctx.defer()
-
         if not ctx.author.voice:
-            await ctx.send("Please join a voice channel first.")
-            return
+            return await ctx.send("Please join a voice channel first.")
 
-        voice_client = ctx.guild.voice_client
-        if voice_client is None:
-            voice_client = await ctx.author.voice.channel.connect()
-
-        track = await music.play(ctx.guild.id, voice_client, song_name)
+        vc = ctx.guild.voice_client or await ctx.author.voice.channel.connect()
+        track = await music.play(ctx.guild.id, vc, song_name)
         if not track:
-            await ctx.send("Couldn't find or play that song.")
-            return
+            return await ctx.send("Couldn't find or play that song.")
 
         state = music.get_state(ctx.guild.id)
-        if len(state.queue) == 0 and state.current == track:
-            await ctx.send(f"Now playing: **{track['title']}**")
+        if state.current == track and len(state.queue) == 0:
+            await ctx.send(embed=now_playing_embed(track), view=MusicControls(ctx.guild.id))
         else:
-            await ctx.send(f"Added to queue: **{track['title']}**")
+            pos = state.queue.index(track) + 1 if track in state.queue else len(state.queue)
+            await ctx.send(embed=queued_embed(track, pos))
 
     @commands.hybrid_command()
     @commands.guild_only()
@@ -76,9 +132,7 @@ class Music(commands.Cog):
         await ctx.defer()
         vc = ctx.guild.voice_client
         if not vc:
-            await ctx.send("I'm not in a voice channel.")
-            return
-
+            return await ctx.send("Not in a voice channel.")
         if vc.is_paused():
             music.resume(vc)
             await ctx.send("Resumed.")
@@ -95,11 +149,9 @@ class Music(commands.Cog):
         await ctx.defer()
         vc = ctx.guild.voice_client
         if not vc:
-            await ctx.send("I'm not in a voice channel.")
-            return
-
+            return await ctx.send("Not in a voice channel.")
         music.stop(ctx.guild.id, vc)
-        await ctx.send("Stopped and queue cleared.")
+        await ctx.send(embed=stopped_embed())
 
     @commands.hybrid_command()
     @commands.guild_only()
@@ -108,9 +160,6 @@ class Music(commands.Cog):
         await ctx.defer()
         vc = ctx.guild.voice_client
         if not vc:
-            await ctx.send("I'm not in a voice channel.")
-            return
-
+            return await ctx.send("Not in a voice channel.")
         skipped = music.skip(ctx.guild.id, vc)
         await ctx.send("Skipped." if skipped else "Nothing to skip.")
-    

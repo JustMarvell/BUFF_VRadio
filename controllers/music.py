@@ -38,6 +38,7 @@ async def fetch_track(query: str) -> dict | None:
         'url' : entry.get('url'),
         'webpage_url' : entry.get('webpage_url'),
         'duration' : entry.get('duration'),
+        'thumbnail': entry.get('thumbnail'),
     }
 
 def play_next(guild_id: int, voice_client: discord.VoiceClient):

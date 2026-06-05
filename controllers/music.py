@@ -11,6 +11,7 @@ class GuildMusicState:
         self.queue: list[dict] = []
         self.current: dict | None = None
         self.is_playing = False
+        self.on_track_start = None
         
 _states: dict[int, GuildMusicState] = {}
 
@@ -74,6 +75,13 @@ async def _play_track(guild_id: int, voice_client: discord.VoiceClient, track: d
         controller_logger.error(f"Failed to fetch stream URL for {track['title']}")
         play_next(guild_id, voice_client)
         return
+
+    state = get_state(guild_id)
+    if state.on_track_start:
+        asyncio.run_coroutine_threadsafe(
+            state.on_track_start(track),
+            voice_client.loop
+        )
 
     source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
 

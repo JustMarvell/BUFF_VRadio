@@ -114,15 +114,23 @@ class Music(commands.Cog):
             return await ctx.send("Please join a voice channel first.")
 
         vc = ctx.guild.voice_client or await ctx.author.voice.channel.connect()
+        
+        state = music.get_state(ctx.guild.id)
+        channel = ctx.channel
+
+        async def on_track_start(track: dict):
+            await channel.send(embed=now_playing_embed(track), view=MusicControls(ctx.guild.id))
+
+        state.on_track_start = on_track_start
+
         track = await music.play(ctx.guild.id, vc, song_name)
         if not track:
             return await ctx.send("Couldn't find or play that song.")
 
-        state = music.get_state(ctx.guild.id)
-        if state.current == track and len(state.queue) == 0:
-            await ctx.send(embed=now_playing_embed(track), view=MusicControls(ctx.guild.id))
+        if state.current == track and not state.queue:
+            pass
         else:
-            pos = state.queue.index(track) + 1 if track in state.queue else len(state.queue)
+            pos = len(state.queue)
             await ctx.send(embed=queued_embed(track, pos))
 
     @commands.hybrid_command()

@@ -31,14 +31,25 @@ async def fetch_track(query: str) -> dict | None:
     entry = await loop.run_in_executor(None, _fetch)
     if not entry:
         return None
-    
+
     return {
-        'title' : entry.get('title'),
-        'url' : entry.get('url'),
-        'webpage_url' : entry.get('webpage_url'),
-        'duration' : entry.get('duration'),
+        'title': entry.get('title'),
+        'webpage_url': entry.get('webpage_url'),
+        'duration': entry.get('duration'),
         'thumbnail': entry.get('thumbnail'),
+        'url': None,
     }
+    
+
+async def fetch_stream_url(webpage_url: str) -> str | None:
+    loop = asyncio.get_event_loop()
+
+    def _fetch():
+        with yt_dlp.YoutubeDL(YDL_OPTS_PLAY) as ydl:
+            info = ydl.extract_info(webpage_url, download=False)
+            return info.get('url')
+
+    return await loop.run_in_executor(None, _fetch)
 
 def play_next(guild_id: int, voice_client: discord.VoiceClient):
     state = get_state(guild_id=guild_id)
@@ -47,12 +58,24 @@ def play_next(guild_id: int, voice_client: discord.VoiceClient):
         state.is_playing = False
         state.current = None
         return
-    
+
     track = state.queue.pop(0)
     state.current = track
     state.is_playing = True
+
+    asyncio.run_coroutine_threadsafe(
+        _play_track(guild_id, voice_client, track),
+        voice_client.loop
+    )
     
-    source = discord.FFmpegPCMAudio(track['url'], **FFMPEG_OPTIONS)
+async def _play_track(guild_id: int, voice_client: discord.VoiceClient, track: dict):
+    stream_url = await fetch_stream_url(track['webpage_url'])
+    if not stream_url:
+        controller_logger.error(f"Failed to fetch stream URL for {track['title']}")
+        play_next(guild_id, voice_client)
+        return
+
+    source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
 
     def after(error):
         if error:

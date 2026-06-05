@@ -33,7 +33,7 @@ class Search(commands.Cog):
                 embed.set_image(url=r['thumbnail'])
             embed.add_field(name="Channel", value=r['channel'] or 'Unknown')
             if r['duration']:
-                mins, secs = divmod(r['duration'], 60)
+                mins, secs = divmod(int(r['duration']), 60)
                 embed.add_field(name="Duration", value=f"{mins}:{secs:02d}")
             embeds.append(embed)
 

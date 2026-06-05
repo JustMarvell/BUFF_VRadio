@@ -1,4 +1,4 @@
-from YDL_OPTS import YDL_OPTS
+from config import YDL_OPTS
 import yt_dlp
 import asyncio
 from functools import partial

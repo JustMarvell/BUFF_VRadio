@@ -4,4 +4,3 @@ dotenv
 asyncio
 logging
 yt-dlp
-paramiko
